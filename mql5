@@ -1,0 +1,140 @@
+
+//+------------------------------------------------------------------+
+//|                                                RSI Divergence Indicator MT5|
+//|                                      Copyright © 2022 forexroboteasy.com|
+//|                                                    Forex Robot Easy Team|
+//+------------------------------------------------------------------+
+
+#property indicator_chart_window
+#property indicator_buffers 4
+#property indicator_color1 Red
+#property indicator_color2 Green
+#property indicator_color3 Aqua
+#property indicator_color4 Magenta
+
+//---- input parameters
+input int RSI_Period = 14; // RSI period
+input int RSI_Level = 70; // RSI overbought/oversold level
+input int Confirmation_Period = 5; // Confirmation period
+
+//---- buffers
+double ExtBuffer1[];
+double ExtBuffer2[];
+double ExtBuffer3[];
+double ExtBuffer4[];
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   //---- indicators
+   SetIndexStyle(0, DRAW_ARROW);
+   SetIndexArrow(0, SYMBOL_ARROWUP);
+   SetIndexBuffer(0, ExtBuffer1);
+   SetIndexLabel(0, 'Bearish Divergence');
+
+   SetIndexStyle(1, DRAW_ARROW);
+   SetIndexArrow(1, SYMBOL_ARROWDOWN);
+   SetIndexBuffer(1, ExtBuffer2);
+   SetIndexLabel(1, 'Bullish Divergence');
+
+   SetIndexStyle(2, DRAW_ARROW);
+   SetIndexArrow(2, SYMBOL_ARROWUP);
+   SetIndexBuffer(2, ExtBuffer3);
+   SetIndexLabel(2, 'Bearish Confirmation');
+
+   SetIndexStyle(3, DRAW_ARROW);
+   SetIndexArrow(3, SYMBOL_ARROWDOWN);
+   SetIndexBuffer(3, ExtBuffer4);
+   SetIndexLabel(3, 'Bullish Confirmation');
+
+   //----
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+{
+   //---- check for bars count
+   if(rates_total<RSI_Period || rates_total<Confirmation_Period)
+      return(0);
+
+   //---- calculate RSI
+   int counted_bars = IndicatorCounted();
+   if(counted_bars<0)
+      return(-1);
+   if(counted_bars>0)
+      counted_bars--;
+
+   int limit = rates_total - counted_bars;
+   double rsi[];
+   ArraySetAsSeries(rsi,true);
+   CopyBuffer(RSI_HANDLE,0,limit,RSI_Period,rsi);
+
+   //---- check for divergences
+   for(int i = limit; i>=0; i--)
+   {
+      if(i<Confirmation_Period)
+         continue;
+
+      bool bullish_divergence = false;
+      bool bearish_divergence = false;
+      bool bullish_confirmation = false;
+      bool bearish_confirmation = false;
+
+      //---- check for bullish divergence
+      if(high[i] > high[i+Confirmation_Period] &&
+         rsi[i] < rsi[i+Confirmation_Period])
+      {
+         bullish_divergence = true;
+         ExtBuffer2[i] = low[i];
+         ExtBuffer3[i+Confirmation_Period] = low[i+Confirmation_Period];
+      }
+
+      //---- check for bearish divergence
+      if(low[i] < low[i+Confirmation_Period] &&
+         rsi[i] > rsi[i+Confirmation_Period])
+      {
+         bearish_divergence = true;
+         ExtBuffer1[i] = high[i];
+         ExtBuffer4[i+Confirmation_Period] = high[i+Confirmation_Period];
+      }
+
+      //---- check for bullish confirmation
+      if(rsi[i] > RSI_Level &&
+         rsi[i+Confirmation_Period] < RSI_Level)
+      {
+         bullish_confirmation = true;
+         ExtBuffer4[i+Confirmation_Period] = high[i+Confirmation_Period];
+      }
+
+      //---- check for bearish confirmation
+      if(rsi[i] < 100 - RSI_Level &&
+         rsi[i+Confirmation_Period] > 100 - RSI_Level)
+      {
+         bearish_confirmation = true;
+         ExtBuffer3[i+Confirmation_Period] = low[i+Confirmation_Period];
+      }
+
+      //---- send alerts
+      if(bullish_divergence || bearish_divergence)
+         SendAlert('Divergence detected!');
+      if(bullish_confirmation || bearish_confirmation)
+         SendAlert('Confirmation detected!');
+   }
+
+   //----
+   return(rates_total);
+}
